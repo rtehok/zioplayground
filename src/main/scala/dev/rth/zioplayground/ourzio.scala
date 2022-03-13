@@ -2,69 +2,78 @@ package dev.rth
 package zioplayground
 
 object ourzio:
-  final case class ZIO[+E, +A](thunk: () => Either[E, A]):
-    def flatMap[E1 >: E, B](azb: A => ZIO[E1, B]): ZIO[E1, B] =
-      ZIO { () =>
-        val errorOrA = thunk()
+  final class ZIO[-R, +E, +A](val run: R => Either[E, A]):
+    def flatMap[R1 <: R, E1 >: E, B](azb: A => ZIO[R1, E1, B]): ZIO[R1, E1, B] =
+      ZIO { r =>
+        val errorOrA = run(r)
         val zErrorOrB = errorOrA match
           case Right(a) => azb(a)
           case Left(e) => ZIO.fail(e)
 
-        val errorOrB = zErrorOrB.thunk()
+        val errorOrB = zErrorOrB.run(r)
         errorOrB
       }
 
-    def map[B](ab: A => B): ZIO[E, B] =
-      ZIO { () =>
-        val errorOrA = thunk()
+    def map[B](ab: A => B): ZIO[R, E, B] =
+      ZIO { r =>
+        val errorOrA = run(r)
         val errorOrB = errorOrA match
           case Right(a) => Right(ab(a))
           case Left(e) => Left(e) // left @ Left(e) => left.asInstanceOf[Either[E, B]]
         errorOrB
       }
 
-    def catchAll[E2, A1 >: A](h: E => ZIO[E2, A1]): ZIO[E2, A1] =
-      ZIO { () =>
-        val errorOrA = thunk()
+    def catchAll[R1 <: R, E2, A1 >: A](h: E => ZIO[R1, E2, A1]): ZIO[R1, E2, A1] =
+      ZIO { r =>
+        val errorOrA = run(r)
         val zErrorOrA1 = errorOrA match
           case Right(a) => ZIO.succeed(a)
           case Left(e) => h(e)
 
-        val errorOrA1 = zErrorOrA1.thunk()
+        val errorOrA1 = zErrorOrA1.run(r)
         errorOrA1
       }
 
-    def mapError[E2](h: E => E2): ZIO[E2, A] =
-      ZIO { () =>
-        val errorOrA = thunk()
+    def mapError[E2](h: E => E2): ZIO[R, E2, A] =
+      ZIO { r =>
+        val errorOrA = run(r)
         val error2OrA = errorOrA match
           case Right(a) => Right(a)
           case Left(e) => Left(h(e)) // left @ Left(e) => left.asInstanceOf[Either[E, B]]
         error2OrA
       }
+      
+    def provide(r: => R): ZIO[Any, E, A] =
+      ZIO(_ => run(r))
+      
   end ZIO
 
   object ZIO:
-    def succeed[A](a: => A): ZIO[Nothing, A] =
-      ZIO(() => Right(a))
+    def succeed[A](a: => A): ZIO[Any, Nothing, A] =
+      ZIO(r => Right(a))
 
-    def fail[E](e: => E): ZIO[E, Nothing] =
-      ZIO(() => Left(e))
+    def fail[E](e: => E): ZIO[Any, E, Nothing] =
+      ZIO(r => Left(e))
 
-    def effect[A](a: => A): ZIO[Throwable, A] =
-      ZIO { () =>
+    def effect[A](a: => A): ZIO[Any, Throwable, A] =
+      ZIO { r =>
         try Right(a)
         catch ex => Left(ex)
       }
+      
+    def fromFunction[R, A](run: R => A): ZIO[R, Nothing, A] =
+      ZIO(r => Right(run(r)))
 
   object console:
-    def putStrLn(line: String): ZIO[Nothing, Unit] =
+    def putStrLn(line: String): ZIO[Any, Nothing, Unit] =
       ZIO.succeed(println(line))
 
-    val getStrLn: ZIO[Nothing, String] =
+    val getStrLn: ZIO[Any, Nothing, String] =
       ZIO.succeed(scala.io.StdIn.readLine())
 
   object Runtime:
     object default:
-      def unsafeRunSync[E, A](zio: => ZIO[E, A]): Either[E, A] =
-        zio.thunk()
+      def unsafeRunSync[E, A](zio: => ZIO[ZEnv, E, A]): Either[E, A] =
+        zio.run(())
+
+  type ZEnv = Unit
