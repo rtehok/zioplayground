@@ -37,9 +37,7 @@ object BusinessLogic:
     }
 
   def make(google: Google): BusinessLogic =
-    new :
-      override def doesGoogleHaveEvenAmountOfPicturesOf(topic: String): Boolean =
-        google.countPicturesOf(topic) % 2 == 0
+    (topic: String) => google.countPicturesOf(topic) % 2 == 0
 
 trait Google:
   def countPicturesOf(topic: String): Int
@@ -49,9 +47,7 @@ object GoogleImpl:
     ZIO.succeed(make)
 
   lazy val make: Google =
-    new :
-      override def countPicturesOf(topic: String): Int =
-        if topic == "cats" then 1337 else 1338
+    (topic: String) => if topic == "cats" then 1337 else 1338
 
 object DependencyGraph:
   lazy val live: ZIO[Any, Nothing, BusinessLogic] =
