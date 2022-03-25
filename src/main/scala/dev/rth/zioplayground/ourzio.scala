@@ -4,48 +4,20 @@ package zioplayground
 object ourzio:
   final class ZIO[-R, +E, +A](val run: R => Either[E, A]):
     def flatMap[R1 <: R, E1 >: E, B](azb: A => ZIO[R1, E1, B]): ZIO[R1, E1, B] =
-      ZIO { r =>
-        val errorOrA = run(r)
-        val zErrorOrB = errorOrA match
-          case Right(a) => azb(a)
-          case Left(e) => ZIO.fail(e)
-
-        val errorOrB = zErrorOrB.run(r)
-        errorOrB
-      }
+      ZIO(r => run(r).fold(ZIO.fail, azb).run(r))
 
     def map[B](ab: A => B): ZIO[R, E, B] =
-      ZIO { r =>
-        val errorOrA = run(r)
-        val errorOrB = errorOrA match
-          case Right(a) => Right(ab(a))
-          case Left(e) => Left(e) // left @ Left(e) => left.asInstanceOf[Either[E, B]]
-        errorOrB
-      }
+      ZIO(r => run(r).map(ab))
 
     def catchAll[R1 <: R, E2, A1 >: A](h: E => ZIO[R1, E2, A1]): ZIO[R1, E2, A1] =
-      ZIO { r =>
-        val errorOrA = run(r)
-        val zErrorOrA1 = errorOrA match
-          case Right(a) => ZIO.succeed(a)
-          case Left(e) => h(e)
-
-        val errorOrA1 = zErrorOrA1.run(r)
-        errorOrA1
-      }
+      ZIO(r => run(r).fold(h, ZIO.succeed).run(r))
 
     def mapError[E2](h: E => E2): ZIO[R, E2, A] =
-      ZIO { r =>
-        val errorOrA = run(r)
-        val error2OrA = errorOrA match
-          case Right(a) => Right(a)
-          case Left(e) => Left(h(e)) // left @ Left(e) => left.asInstanceOf[Either[E, B]]
-        error2OrA
-      }
-      
+      ZIO(r => run(r).left.map(h))
+
     def provide(r: => R): ZIO[Any, E, A] =
       ZIO(_ => run(r))
-      
+
   end ZIO
 
   object ZIO:
@@ -60,7 +32,7 @@ object ourzio:
         try Right(a)
         catch ex => Left(ex)
       }
-      
+
     def fromFunction[R, A](run: R => A): ZIO[R, Nothing, A] =
       ZIO(r => Right(run(r)))
 
