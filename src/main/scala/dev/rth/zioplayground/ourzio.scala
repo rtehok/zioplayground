@@ -1,6 +1,8 @@
 package dev.rth
 package zioplayground
 
+import scala.reflect.ClassTag
+
 object ourzio:
   final class ZIO[-R, +E, +A](val run: R => Either[E, A]):
     def flatMap[R1 <: R, E1 >: E, B](azb: A => ZIO[R1, E1, B]): ZIO[R1, E1, B] =
@@ -17,6 +19,9 @@ object ourzio:
 
     def provide(r: => R): ZIO[Any, E, A] =
       ZIO(_ => run(r))
+
+    def provideSome[R0](f: R0 => R): ZIO[R0, E, A] =
+      ZIO.accessM(r0 => provide(f(r0)))
 
   end ZIO
 
@@ -85,7 +90,23 @@ object ourzio:
 
   object Runtime:
     object default:
-      def unsafeRunSync[E, A](zio: => ZIO[ZEnv, E, A]): Either[E, A] =
-        zio.run(console.Console.make)
+      def unsafeRunSync[E, A](zio: => ZIO[Has[ZEnv], E, A]): Either[E, A] =
+        zio.run(Has(console.Console.make))
 
   type ZEnv = console.Console
+
+  final class Has[A] private(private val map: Map[String, Any])
+
+  object Has:
+    def apply[A](a: A)(using tag: ClassTag[A]): Has[A] =
+      new Has(Map(tag.toString -> a))
+
+    extension[A <: Has[?]] (a: A)
+      inline def ++[B <: Has[?]](b: B): A & B =
+        union(b)
+
+      infix def union[B <: Has[?]](b: B): A & B =
+        new Has(a.map ++ b.map).asInstanceOf[A & B]
+
+      def get[S](using tag: ClassTag[S], view: A => Has[S]): S =
+        a.map(tag.toString).asInstanceOf[S]

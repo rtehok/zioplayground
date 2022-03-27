@@ -68,7 +68,7 @@ object DependencyGraph:
 
 trait HasConsole:
   def console: zioplayground.ourzio.console.Console
-  
+
 trait HasBusinessLogic:
   def businessLogic: zioplayground.businessLogic.BusinessLogic
 
@@ -78,22 +78,19 @@ object Main extends scala.App :
   lazy val program =
     for
       bl <- DependencyGraph.live
-      p <- makeProgram.provide{
-        new HasConsole with HasBusinessLogic:
-          override lazy val console = zioplayground.ourzio.console.Console.make
-          override lazy val businessLogic = bl
-      }
+//      p <- makeProgram.provide(Has(bl) union Has(console.Console.make))
+      p <- makeProgram.provideSome[Has[ZEnv]](_ union Has(bl))
     yield p
 
 //  def makeProgram(bl: businessLogic.BusinessLogic) =
   lazy val makeProgram =
     for
-      env <- ZIO.environment[HasConsole & HasBusinessLogic]
-      _ <- env.console.putStrLn("─" * 100)
-      cats <- env.businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("cats")
-      _ <- env.console.putStrLn(cats.toString)
-      dogs <- env.businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("dogs")
-      _ <- env.console.putStrLn(dogs.toString)
-      _ <- env.console.putStrLn("─" * 100)
+      env <- ZIO.environment[Has[console.Console] & Has[businessLogic.BusinessLogic]]
+      _ <- env.get[console.Console].putStrLn("─" * 100)
+      cats <- env.get[businessLogic.BusinessLogic].doesGoogleHaveEvenAmountOfPicturesOf("cats")
+      _ <- env.get[console.Console].putStrLn(cats.toString)
+      dogs <- env.get[businessLogic.BusinessLogic].doesGoogleHaveEvenAmountOfPicturesOf("dogs")
+      _ <- env.get[console.Console].putStrLn(dogs.toString)
+      _ <- env.get[console.Console].putStrLn("─" * 100)
     yield ()
 
