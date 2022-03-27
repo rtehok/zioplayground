@@ -35,21 +35,21 @@ object ourzio:
 
     def fromFunction[R, A](run: R => A): ZIO[R, Nothing, A] =
       ZIO(r => Right(run(r)))
-      
+
     inline def access[R]: AccessPartiallyApplied[R] =
       AccessPartiallyApplied()
-      
+
     final class AccessPartiallyApplied[R]():
       def apply[A](f: R => A): ZIO[R, Nothing, A] =
         environment[R].map(f)
-        
-    inline def accessM[R]: AccessMPartiallyApplied[R]=
+
+    inline def accessM[R]: AccessMPartiallyApplied[R] =
       AccessMPartiallyApplied()
-      
+
     final class AccessMPartiallyApplied[R]():
       def apply[E, A](f: R => ZIO[R, E, A]): ZIO[R, E, A] =
         environment.flatMap(f)
-    
+
     inline def environment[R]: ZIO[R, Nothing, R] =
       identity
 
@@ -60,15 +60,32 @@ object ourzio:
       ZIO.fromFunction(Predef.identity)
 
   object console:
-    def putStrLn(line: String): ZIO[Any, Nothing, Unit] =
-      ZIO.succeed(println(line))
+    trait Console:
+      def putStrLn(line: String): ZIO[Any, Nothing, Unit]
 
-    val getStrLn: ZIO[Any, Nothing, String] =
-      ZIO.succeed(scala.io.StdIn.readLine())
+      def getStrLn: ZIO[Any, Nothing, String]
+
+    object Console:
+      lazy val live: ZIO[Any, Nothing, Console] =
+        ZIO.succeed(make)
+
+      lazy val make: Console =
+        new :
+          def putStrLn(line: String): ZIO[Any, Nothing, Unit] =
+            ZIO.succeed(println(line))
+
+          lazy val getStrLn: ZIO[Any, Nothing, String] =
+            ZIO.succeed(scala.io.StdIn.readLine())
+
+    def putStrLn(line: String): ZIO[Console, Nothing, Unit] =
+      ZIO.accessM(_.putStrLn(line))
+
+    def getStrLn: ZIO[Console, Nothing, String] =
+      ZIO.accessM(_.getStrLn)
 
   object Runtime:
     object default:
       def unsafeRunSync[E, A](zio: => ZIO[ZEnv, E, A]): Either[E, A] =
-        zio.run(())
+        zio.run(console.Console.make)
 
-  type ZEnv = Unit
+  type ZEnv = console.Console

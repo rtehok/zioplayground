@@ -2,6 +2,7 @@ package dev.rth
 package zioplayground
 
 import dev.rth.zioplayground.ourzio.*
+//import zio.*
 
 //@main def Main(args: String*): Unit =
 //  val trace = s"[${Console.BLUE}TRACE${Console.RESET}]"
@@ -65,16 +66,34 @@ object DependencyGraph:
     val bl = businessLogic.BusinessLogic.make(g)
     bl
 
-object Main extends scala.App :
-  Runtime.default.unsafeRunSync(program.provide(DependencyGraph.make))
+trait HasConsole:
+  def console: zioplayground.ourzio.console.Console
+  
+trait HasBusinessLogic:
+  def businessLogic: zioplayground.businessLogic.BusinessLogic
 
-  lazy val program: ZIO[businessLogic.BusinessLogic, Nothing, ZEnv] =
+object Main extends scala.App :
+  Runtime.default.unsafeRunSync(program)
+
+  lazy val program =
     for
-      _ <- console.putStrLn("─" * 100)
-      cats <- businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("cats")
-      _ <- console.putStrLn(cats.toString)
-      dogs <- businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("dogs")
-      _ <- console.putStrLn(dogs.toString)
-      _ <- console.putStrLn("─" * 100)
+      bl <- DependencyGraph.live
+      p <- makeProgram.provide{
+        new HasConsole with HasBusinessLogic:
+          override lazy val console = zioplayground.ourzio.console.Console.make
+          override lazy val businessLogic = bl
+      }
+    yield p
+
+//  def makeProgram(bl: businessLogic.BusinessLogic) =
+  lazy val makeProgram =
+    for
+      env <- ZIO.environment[HasConsole & HasBusinessLogic]
+      _ <- env.console.putStrLn("─" * 100)
+      cats <- env.businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("cats")
+      _ <- env.console.putStrLn(cats.toString)
+      dogs <- env.businessLogic.doesGoogleHaveEvenAmountOfPicturesOf("dogs")
+      _ <- env.console.putStrLn(dogs.toString)
+      _ <- env.console.putStrLn("─" * 100)
     yield ()
 
